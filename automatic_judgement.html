@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Image Processing</title>
+    <style>
+      input {
+        margin-bottom: 10px;
+      }
+    </style>
+    <!-- <script src="https://unpkg.com/axios/dist/axios.min.js"></script> -->
+  </head>
+  <body>
+    <label for="fileInput1">Gambar Asli : </label>
+    <input type="file" id="fileInput1" accept="image/*" /> <br />
+    <label for="fileInput2">Karya Peserta : </label>
+    <input type="file" id="fileInput2" accept="image/*" /> <br />
+    <button onclick="compareImages()">Compare Images</button>
+
+    <script async src="ssim.js"></script>
+    <script src="histogram.js"></script>
+    <script src="noise.js"></script>
+    <script>
+      // Test
+      const warna = [
+        "#ff0000", // merah
+        "#000000", // hitam
+        "#ffffff", // putih
+      ];
+
+      async function compareImages() {
+        const fileInput1 = document.getElementById("fileInput1").files[0];
+        const fileInput2 = document.getElementById("fileInput2").files[0];
+
+        const img1 = await loadImage(fileInput1);
+        const img2 = await loadImage(fileInput2);
+
+        if (img1.imgData.length !== img2.imgData.length) {
+          console.log("Error: panjang data tidak sama!");
+          return 0;
+        }
+
+        // Perhitungan Kemiripan dengan ssim
+        const grayImage1 = convertToGrayscale(img1);
+        const grayImage2 = convertToGrayscale(img2);
+        const { meanSSIM, ssimMap } = calculateSSIM(grayImage1, grayImage2);
+        console.log("SSIM Index:", meanSSIM);
+
+        // Perhitungan Jarak Histogram
+        const hist1 = await getHistogram(img1.imgData, warna);
+        const hist2 = await getHistogram(img2.imgData, warna);
+        const jarakHistogram = await compareHistogram(hist1, hist2);
+        console.log("Jarak Histogram:", jarakHistogram);
+
+        // Perhitungan Penalty Bagian yang Tidak Terwarani
+        const uncoloredPenalty = calculateUncoloredPenalty(hist1, hist2);
+        console.log("penalty: ", uncoloredPenalty);
+
+        // // Perhitungan nilai total karya peserta
+        const nilaiTotal = (meanSSIM + jarakHistogram * 2) / 3;
+        const nilaiAkhir = Math.max(
+          0,
+          Math.min(nilaiTotal - uncoloredPenalty, 100)
+        );
+        console.log("nilai akhir : ", nilaiAkhir);
+        console.log("============================================");
+      }
+
+      function loadImage(file) {
+        return new Promise((resolve, reject) => {
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = function (e) {
+              const img = new Image();
+              img.onload = function () {
+                try {
+                  const width = img.width;
+                  const height = img.height;
+
+                  // Membuat OffscreenCanvas
+                  const offscreenCanvas = new OffscreenCanvas(width, height);
+                  const ctx = offscreenCanvas.getContext("2d");
+
+                  // Menggambar gambar pada OffscreenCanvas
+                  ctx.drawImage(img, 0, 0);
+
+                  // Mengambil data gambar
+                  const imageData = ctx.getImageData(0, 0, width, height);
+                  const imgData_a = imageData.data;
+                  const imgData = hapusNoise(imgData_a, warna);
+
+                  // Mengembalikan imgData melalui resolve
+                  resolve({ imgData, width, height });
+                  // resolve(imgData);
+                } catch (error) {
+                  reject(error);
+                }
+              };
+              img.src = e.target.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          } else {
+            reject("No file provided");
+          }
+        });
+      }
+
+      function convertToGrayscale(img) {
+        const grayImage = [];
+        for (let i = 0; i < img.height; i++) {
+          grayImage.push([]);
+          for (let j = 0; j < img.width; j++) {
+            const index = (i * img.width + j) * 4;
+            const r = img.imgData[index];
+            const g = img.imgData[index + 1];
+            const b = img.imgData[index + 2];
+            const gray = 0.299 * r + 0.587 * g + 0.114 * b; // cantumkan sumber
+            grayImage[i].push(gray);
+          }
+        }
+        return grayImage;
+      }
+    </script>
+  </body>
+</html>
